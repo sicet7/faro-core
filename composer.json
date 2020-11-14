@@ -1,5 +1,5 @@
 {
-    "name": "randomphp/faro-core",
+    "name": "sicet7/faro-core",
     "license": "MIT",
     "bin": [
         "bin/faro"
@@ -10,7 +10,7 @@
     },
     "autoload": {
         "psr-4": {
-            "RandomPHP\\Faro\\": "src/"
+            "Sicet7\\Faro\\": "src/"
         }
     }
 }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RandomPHP\Faro\Console;
+namespace Sicet7\Faro\Console;
 
 use DI\DependencyException;
 use DI\Invoker\FactoryParameterResolver;

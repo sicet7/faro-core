@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RandomPHP\Faro\Exceptions;
+namespace Sicet7\Faro\Exceptions;
 
 class ModuleLoaderException extends \Exception
 {

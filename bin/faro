@@ -2,6 +2,6 @@
 <?php
 require_once __DIR__ . '/../../../autoload.php';
 
-use RandomPHP\Faro\Console\ModuleLoader;
+use Sicet7\Faro\Console\ModuleLoader;
 
 ModuleLoader::getApplication()->run();

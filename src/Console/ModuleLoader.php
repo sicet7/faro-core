@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace RandomPHP\Faro\Console;
+namespace Sicet7\Faro\Console;
 
 use DI\Container;
 use DI\ContainerBuilder;
 use DI\Invoker\FactoryParameterResolver;
 use Psr\Container\ContainerInterface;
-use RandomPHP\Faro\Exceptions\ModuleLoaderException;
-use RandomPHP\Faro\ModuleLoader as AbstractModuleLoader;
+use Sicet7\Faro\Exceptions\ModuleLoaderException;
+use Sicet7\Faro\ModuleLoader as AbstractModuleLoader;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
 use Symfony\Component\Console\CommandLoader\ContainerCommandLoader;
