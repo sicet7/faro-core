@@ -20,6 +20,12 @@ use function DI\get;
 
 final class ModuleLoader extends AbstractModuleLoader
 {
+    private const MODULE_INTERFACES = [
+        ContainerSetupInterface::class,
+        HasDefinitionsInterface::class,
+        HasCommandsInterface::class,
+    ];
+
     /**
      * @return Application
      * @throws ModuleLoaderException
@@ -44,15 +50,17 @@ final class ModuleLoader extends AbstractModuleLoader
     {
         $commandMasterArray = [];
         foreach ($this->getList() as $moduleFqn) {
-            $commandArray = call_user_func([$moduleFqn, 'getCommands']);
-            if (!is_array($commandArray)) {
-                throw new ModuleLoaderException(
-                    'Failed to load command from "' . $moduleFqn . '" Module,' .
-                    'type of returned value was not "array".'
-                );
-            }
-            foreach ($commandArray as $commandName => $commandClassFqn) {
-                $commandMasterArray[$commandName] = $commandClassFqn;
+            if (is_subclass_of($moduleFqn, HasCommandsInterface::class)) {
+                $commandArray = call_user_func([$moduleFqn, 'getCommands']);
+                if (!is_array($commandArray)) {
+                    throw new ModuleLoaderException(
+                        'Failed to load command from "' . $moduleFqn . '" Module,' .
+                        'type of returned value was not "array".'
+                    );
+                }
+                foreach ($commandArray as $commandName => $commandClassFqn) {
+                    $commandMasterArray[$commandName] = $commandClassFqn;
+                }
             }
         }
         return $commandMasterArray;
@@ -88,14 +96,16 @@ final class ModuleLoader extends AbstractModuleLoader
         $cb->addDefinitions($commandDefinitions);
 
         foreach ($this->getList() as $moduleFqn) {
-            $moduleDefinitions = call_user_func([$moduleFqn, 'getDefinitions']);
-            if (!is_array($moduleDefinitions)) {
-                throw new ModuleLoaderException(
-                    'Invalid definitions type. Method "getDefinitions" must return array type.' .
-                    'Module: "' . $moduleFqn . '".'
-                );
+            if (is_subclass_of($moduleFqn, HasDefinitionsInterface::class)) {
+                $moduleDefinitions = call_user_func([$moduleFqn, 'getDefinitions']);
+                if (!is_array($moduleDefinitions)) {
+                    throw new ModuleLoaderException(
+                        'Invalid definitions type. Method "getDefinitions" must return array type.' .
+                        'Module: "' . $moduleFqn . '".'
+                    );
+                }
+                $cb->addDefinitions($moduleDefinitions);
             }
-            $cb->addDefinitions($moduleDefinitions);
         }
 
         return $cb->build();
@@ -106,7 +116,9 @@ final class ModuleLoader extends AbstractModuleLoader
         if (!($this->container instanceof ContainerInterface)) {
             $this->container = $this->buildContainer();
             foreach ($this->getList() as $moduleFqn) {
-                call_user_func([$moduleFqn, 'postContainerSetup'], $this->container);
+                if (is_subclass_of($moduleFqn, ContainerSetupInterface::class)) {
+                    call_user_func([$moduleFqn, 'setup'], $this->container);
+                }
             }
         }
         return $this->container;
@@ -119,10 +131,16 @@ final class ModuleLoader extends AbstractModuleLoader
     public function buildApplication(): Application
     {
         foreach ($this->getList() as $fqn) {
-            if (!is_subclass_of($fqn, ModuleInterface::class)) {
+            $hasValidInterface = false;
+            foreach (static::MODULE_INTERFACES as $interface) {
+                if (is_subclass_of($fqn, $interface)) {
+                    $hasValidInterface = true;
+                }
+            }
+            if (!$hasValidInterface) {
                 throw new ModuleLoaderException(
-                    '"' . $fqn . '" is not a subclass of "' . ModuleInterface::class . '", ' .
-                    'this is required for the it to be a valid module.'
+                    'Invalid module. No known module interface implemented.' .
+                    ' Module: "' . $fqn . '".'
                 );
             }
         }
