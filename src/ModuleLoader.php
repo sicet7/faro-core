@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Sicet7\Faro;
 
-use Psr\Container\ContainerInterface;
-
 abstract class ModuleLoader
 {
     private static ?ModuleLoader $instance = null;

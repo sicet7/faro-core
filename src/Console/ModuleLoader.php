@@ -8,7 +8,7 @@ use DI\Container;
 use DI\ContainerBuilder;
 use DI\Invoker\FactoryParameterResolver;
 use Psr\Container\ContainerInterface;
-use Sicet7\Faro\Exceptions\ModuleLoaderException;
+use Sicet7\Faro\Exception\ModuleLoaderException;
 use Sicet7\Faro\ModuleLoader as AbstractModuleLoader;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
