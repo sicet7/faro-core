@@ -9,14 +9,14 @@ use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
 use Sicet7\Faro\Exception\ModuleLoaderException;
 
-class ModuleLoader
+abstract class ModuleLoader
 {
     private static ?ModuleLoader $instance = null;
 
     /**
      * @return ModuleLoader
      */
-    public static function getInstance(): ModuleLoader
+    public final static function getInstance(): ModuleLoader
     {
         if (!(static::$instance instanceof ModuleLoader)) {
             static::$instance = new static();
@@ -27,7 +27,7 @@ class ModuleLoader
     /**
      * @param string $moduleFqn
      */
-    public static function registerModule(string $moduleFqn): void
+    public final static function registerModule(string $moduleFqn): void
     {
         static::getInstance()->addModule($moduleFqn);
     }
@@ -35,25 +35,23 @@ class ModuleLoader
     /**
      * @return array
      */
-    public static function getModuleList(): array
+    public final static function getModuleList(): array
     {
         return static::getInstance()->getList();
     }
 
-    private ?array $list = null;
+    private array $list = [];
+    private string $moduleInterface = ModuleInterface::class;
 
     /**
      * ModuleLoader constructor.
      */
-    private function __construct()
-    {
-        $this->list = [];
-    }
+    protected function __construct() { }
 
     /**
      * @param string $moduleFqn
      */
-    public function addModule(string $moduleFqn): void
+    public final function addModule(string $moduleFqn): void
     {
         $this->list[] = $moduleFqn;
     }
@@ -61,9 +59,30 @@ class ModuleLoader
     /**
      * @return array
      */
-    public function getList(): array
+    public final function getList(): array
     {
         return $this->list;
+    }
+
+    /**
+     * @param string $moduleInterface
+     * @throws ModuleLoaderException
+     */
+    public final function setModuleInterface(string $moduleInterface): void
+    {
+        if (!interface_exists($moduleInterface, true)) {
+            throw new ModuleLoaderException(
+                'Invalid ModuleInterface. "' . $moduleInterface
+                . '" is not a known interface.'
+            );
+        }
+        if (!is_subclass_of($moduleInterface, ModuleInterface::class)) {
+            throw new ModuleLoaderException(
+                'Invalid ModuleInterface. "'
+                . $moduleInterface . '" must extend "' . ModuleInterface::class . '".'
+            );
+        }
+        $this->moduleInterface = $moduleInterface;
     }
 
     /**
@@ -71,7 +90,7 @@ class ModuleLoader
      * @throws ModuleLoaderException
      * @throws \Exception
      */
-    public function buildContainer(): ContainerInterface
+    public final function buildContainer(): ContainerInterface
     {
         $moduleList = $this->getList();
 
@@ -79,8 +98,10 @@ class ModuleLoader
         $containerBuilder->useAutowiring(false);
         $containerBuilder->useAnnotations(false);
 
+        $containerBuilder->addDefinitions($this->definitions());
+
         foreach ($moduleList as $moduleFqn) {
-            if (!is_subclass_of($moduleFqn, ModuleInterface::class)) {
+            if (!is_subclass_of($moduleFqn, $this->moduleInterface)) {
                 throw new ModuleLoaderException(
                     'Invalid module class. "' . $moduleFqn . '" must be an instance of ' .
                     '"' . ModuleInterface::class . '".'
@@ -104,4 +125,5 @@ class ModuleLoader
         }
         return $container;
     }
+    public abstract function definitions(): array;
 }
