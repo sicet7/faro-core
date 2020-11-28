@@ -1,11 +1,7 @@
 {
     "name": "sicet7/faro-core",
     "license": "MIT",
-    "bin": [
-        "bin/faro"
-    ],
     "require": {
-        "symfony/console": "^5.1",
         "php-di/php-di": "^6.3"
     },
     "autoload": {
