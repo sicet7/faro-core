@@ -41,7 +41,6 @@ abstract class ModuleLoader
     }
 
     private array $list = [];
-    private string $moduleInterface = ModuleInterface::class;
 
     /**
      * ModuleLoader constructor.
@@ -65,27 +64,6 @@ abstract class ModuleLoader
     }
 
     /**
-     * @param string $moduleInterface
-     * @throws ModuleLoaderException
-     */
-    public final function setModuleInterface(string $moduleInterface): void
-    {
-        if (!interface_exists($moduleInterface, true)) {
-            throw new ModuleLoaderException(
-                'Invalid ModuleInterface. "' . $moduleInterface
-                . '" is not a known interface.'
-            );
-        }
-        if (!is_subclass_of($moduleInterface, ModuleInterface::class)) {
-            throw new ModuleLoaderException(
-                'Invalid ModuleInterface. "'
-                . $moduleInterface . '" must extend "' . ModuleInterface::class . '".'
-            );
-        }
-        $this->moduleInterface = $moduleInterface;
-    }
-
-    /**
      * @return ContainerInterface
      * @throws ModuleLoaderException
      * @throws \Exception
@@ -98,10 +76,13 @@ abstract class ModuleLoader
         $containerBuilder->useAutowiring(false);
         $containerBuilder->useAnnotations(false);
 
-        $containerBuilder->addDefinitions($this->definitions());
+        $extensionDefinitions = $this->definitions();
+        if (!empty($extensionDefinitions)) {
+            $containerBuilder->addDefinitions($extensionDefinitions);
+        }
 
         foreach ($moduleList as $moduleFqn) {
-            if (!is_subclass_of($moduleFqn, $this->moduleInterface)) {
+            if (!is_subclass_of($moduleFqn, ModuleInterface::class)) {
                 throw new ModuleLoaderException(
                     'Invalid module class. "' . $moduleFqn . '" must be an instance of ' .
                     '"' . ModuleInterface::class . '".'
@@ -125,5 +106,11 @@ abstract class ModuleLoader
         }
         return $container;
     }
+
+    /**
+     * This function is to allow sub classes to define their custom definitions
+     *
+     * @return array
+     */
     public abstract function definitions(): array;
 }
