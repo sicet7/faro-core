@@ -82,10 +82,10 @@ abstract class ModuleLoader
         }
 
         foreach ($moduleList as $moduleFqn) {
-            if (!is_subclass_of($moduleFqn, ModuleInterface::class)) {
+            if (!is_subclass_of($moduleFqn, AbstractModule::class)) {
                 throw new ModuleLoaderException(
                     'Invalid module class. "' . $moduleFqn . '" must be an instance of ' .
-                    '"' . ModuleInterface::class . '".'
+                    '"' . AbstractModule::class . '".'
                 );
             }
 
@@ -96,7 +96,9 @@ abstract class ModuleLoader
                     'Module: "' . $moduleFqn . '".'
                 );
             }
-            $containerBuilder->addDefinitions($moduleDefinitions);
+            if (!empty($moduleDefinitions)) {
+                $containerBuilder->addDefinitions($moduleDefinitions);
+            }
         }
 
         $container = $containerBuilder->build();
