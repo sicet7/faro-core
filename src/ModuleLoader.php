@@ -1,118 +1,274 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Sicet7\Faro;
 
-use DI\Container;
 use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
 use Sicet7\Faro\Exception\ModuleLoaderException;
 
-abstract class ModuleLoader
+class ModuleLoader
 {
-    private static ?ModuleLoader $instance = null;
+    /**
+     * @var string
+     */
+    private string $moduleFqn;
 
     /**
-     * @return ModuleLoader
+     * @var ModuleContainer
      */
-    public final static function getInstance(): ModuleLoader
-    {
-        if (!(static::$instance instanceof ModuleLoader)) {
-            static::$instance = new static();
-        }
-        return static::$instance;
-    }
+    private ModuleContainer $moduleContainer;
 
     /**
-     * @param string $moduleFqn
+     * @var bool
      */
-    public final static function registerModule(string $moduleFqn): void
-    {
-        static::getInstance()->addModule($moduleFqn);
-    }
+    private bool $loaded = false;
 
     /**
-     * @return array
+     * @var bool
      */
-    public final static function getModuleList(): array
-    {
-        return static::getInstance()->getList();
-    }
+    private bool $setup = false;
 
-    private array $list = [];
+    /**
+     * @var bool
+     */
+    private bool $enabled = false;
+
+    /**
+     * @var string[]
+     */
+    private array $dependencyNames = [];
+
+    /**
+     * @var ModuleLoader[]
+     */
+    private array $dependencyLoaders = [];
+
+    /**
+     * @var string
+     */
+    private string $name;
+
+    /**
+     * @var array
+     */
+    private array $definitions = [];
 
     /**
      * ModuleLoader constructor.
-     */
-    protected function __construct() { }
-
-    /**
      * @param string $moduleFqn
-     */
-    public final function addModule(string $moduleFqn): void
-    {
-        $this->list[] = $moduleFqn;
-    }
-
-    /**
-     * @return array
-     */
-    public final function getList(): array
-    {
-        return $this->list;
-    }
-
-    /**
-     * @return ContainerInterface
+     * @param ModuleContainer $moduleContainer
      * @throws ModuleLoaderException
-     * @throws \Exception
      */
-    public final function buildContainer(): ContainerInterface
-    {
-        $moduleList = $this->getList();
-
-        $containerBuilder = new ContainerBuilder(Container::class);
-        $containerBuilder->useAutowiring(false);
-        $containerBuilder->useAnnotations(false);
-
-        $extensionDefinitions = $this->definitions();
-        if (!empty($extensionDefinitions)) {
-            $containerBuilder->addDefinitions($extensionDefinitions);
-        }
-
-        foreach ($moduleList as $moduleFqn) {
-            if (!is_subclass_of($moduleFqn, AbstractModule::class)) {
-                throw new ModuleLoaderException(
-                    'Invalid module class. "' . $moduleFqn . '" must be an instance of ' .
-                    '"' . AbstractModule::class . '".'
-                );
-            }
-
-            $moduleDefinitions = call_user_func([$moduleFqn, 'getDefinitions']);
-            if (!is_array($moduleDefinitions)) {
-                throw new ModuleLoaderException(
-                    'Invalid definitions type. Method "getDefinitions" must return array type. ' .
-                    'Module: "' . $moduleFqn . '".'
-                );
-            }
-            if (!empty($moduleDefinitions)) {
-                $containerBuilder->addDefinitions($moduleDefinitions);
-            }
-        }
-
-        $container = $containerBuilder->build();
-
-        foreach ($moduleList as $moduleFqn) {
-            call_user_func([$moduleFqn, 'setup'], $container);
-        }
-        return $container;
+    public function __construct(
+        string $moduleFqn,
+        ModuleContainer $moduleContainer
+    ) {
+        $this->moduleFqn = '\\' . ltrim($moduleFqn, '\\');
+        $this->moduleContainer = $moduleContainer;
+        $this->init();
     }
 
     /**
-     * This function is to allow sub classes to define their custom definitions
-     *
+     * @throws ModuleLoaderException
+     */
+    private function init()
+    {
+        if (!is_subclass_of($this->getModuleFqn(), AbstractModule::class)) {
+            throw new ModuleLoaderException(
+                "Invalid module class. \"{$this->getModuleFqn()}\" must be an instance of " .
+                '"' . AbstractModule::class . '".'
+            );
+        }
+
+        $enabled = $this->moduleRead('isEnabled');
+        if (!is_bool($enabled)) {
+            throw new ModuleLoaderException(
+                "Invalid \"isEnabled\" state on module: \"{$this->getModuleFqn()}\""
+            );
+        }
+        $this->enabled = $enabled;
+
+        /* F*** the rest if we ain't enabled :-) */
+        if (!$this->isEnabled()) {
+            return;
+        }
+
+        $dependencies = $this->moduleRead('getDependencies');
+        if (!is_array($dependencies)) {
+            throw new ModuleLoaderException(
+                "Unknown dependency type on module: \"{$this->getModuleFqn()}\""
+            );
+        }
+        $this->dependencyNames = $dependencies;
+
+        $name = $this->moduleRead('getName');
+        if (!is_string($name) || empty($name)) {
+            throw new ModuleLoaderException(
+                "The module name of {$this->getModuleFqn()} must be a non empty string value."
+            );
+        }
+        $this->name = $name;
+
+        $definitions = $this->moduleRead('getDefinitions');
+        if (!is_array($definitions)) {
+            throw new ModuleLoaderException(
+                "Invalid definitions type on module: \"{$this->getModuleFqn()}\"."
+            );
+        }
+        $this->definitions = $definitions;
+    }
+
+    /**
+     * @param string $method
+     * @return mixed
+     */
+    private function moduleRead(string $method)
+    {
+        return call_user_func([$this->getModuleFqn(), $method]);
+    }
+
+    /**
+     * @return bool
+     */
+    private function findDependencyModuleLoaders(): bool
+    {
+        if (empty($this->dependencyNames)) {
+            return true;
+        }
+
+        foreach ($this->moduleContainer->getList() as $moduleLoader) {
+            if (!isset($this->dependencyLoaders[$moduleLoader->getName()]) &&
+                in_array($moduleLoader->getName(), $this->dependencyNames)) {
+                $this->dependencyLoaders[$moduleLoader->getName()] = $moduleLoader;
+            }
+        }
+
+        if (count($this->dependencyNames) == count($this->dependencyLoaders)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @return bool
+     */
+    private function isDependenciesLoaded(): bool
+    {
+        if (empty($this->dependencyNames)) {
+            return true;
+        }
+        if (!$this->findDependencyModuleLoaders()) {
+            return false;
+        }
+        foreach ($this->dependencyLoaders as $loader) {
+            if (!$loader->isEnabled() || !$loader->isLoaded()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @return bool
+     */
+    private function isDependenciesSetup(): bool
+    {
+        if (empty($this->dependencyNames)) {
+            return true;
+        }
+        if (!$this->findDependencyModuleLoaders()) {
+            return false;
+        }
+        foreach ($this->dependencyLoaders as $loader) {
+            if (!$loader->isEnabled() || !$loader->isSetup()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @return ModuleContainer
+     */
+    protected function getModuleContainer(): ModuleContainer
+    {
+        return $this->moduleContainer;
+    }
+
+    /**
+     * @return string
+     */
+    public function getModuleFqn(): string
+    {
+        return $this->moduleFqn;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isLoaded(): bool
+    {
+        return $this->loaded;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isSetup(): bool
+    {
+        return $this->setup;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isEnabled(): bool
+    {
+        return $this->enabled;
+    }
+
+    /**
+     * @return string
+     */
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    /**
      * @return array
      */
-    public abstract function definitions(): array;
+    public function getDefinitions(): array
+    {
+        return $this->definitions;
+    }
+
+    /**
+     * @return bool
+     */
+    public function load(): bool
+    {
+        if ($this->isLoaded() || !$this->isEnabled() || !$this->isDependenciesLoaded()) {
+            return false;
+        }
+        $this->getModuleContainer()
+            ->getContainerBuilder()
+            ->addDefinitions($this->getDefinitions());
+        $this->loaded = true;
+        return true;
+    }
+
+    /**
+     * @param ContainerInterface $container
+     * @return bool
+     */
+    public function setup(ContainerInterface $container): bool
+    {
+        if ($this->isSetup() || !$this->isEnabled() || !$this->isDependenciesSetup()) {
+            return false;
+        }
+        call_user_func([$this->getModuleFqn(), 'setup'], $container);
+        $this->setup = true;
+        return true;
+    }
 }
